@@ -1,0 +1,299 @@
+/* landingpage.css */
+.landing-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #FF5700, #FF8C5F); /* Reddit-inspired gradient */
+    font-family: "Segoe UI", "Roboto", sans-serif;
+    color: white;
+    padding: 2rem;
+  }
+  
+  h1 {
+    font-size: 2.8rem;
+    margin-bottom: 1.5rem;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+  }
+  
+  .input-field {
+    width: min(600px, 90vw);
+    height: 48px;
+    padding: 12px 20px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 24px;
+    font-size: 1.1rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    text-align: center;
+    margin-bottom: 20px;
+    outline: none;
+    backdrop-filter: blur(5px);
+    transition: all 0.3s ease-in-out;
+  }
+  
+  .input-field::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+  }
+  
+  .input-field:focus {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+  }
+  
+  .custom-button {
+    background-color: white;
+    color: #FF4500; /* Reddit orange */
+    padding: 14px 32px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 24px;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease-in-out;
+  }
+  
+  .custom-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+    background-color: #f8f8f8;
+  }
+  
+  .custom-button:active {
+    transform: translateY(0);
+  }
+  
+  .error-message {
+    color: #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+    padding: 10px 20px;
+    border-radius: 12px;
+    margin: 20px 0;
+  }
+  
+  .posts-container {
+    width: min(1200px, 90vw);
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+  }
+  
+  .post-card {
+    background: rgba(255, 255, 255, 0.9);
+    padding: 20px;
+    border-radius: 12px;
+    color: #333;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s;
+  }
+  
+  .post-card:hover {
+    transform: translateY(-5px);
+  }
+  
+  .post-card h2 {
+    font-size: 1.2rem;
+    margin-bottom: 10px;
+    color: #FF4500;
+  }
+  
+  .post-card p {
+    font-size: 0.9rem;
+    margin-bottom: 15px;
+  }
+  
+  .post-meta {
+    display: flex;
+    gap: 15px;
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 10px;
+  }
+  
+  .post-card a {
+    display: inline-block;
+    color: #FF4500;
+    text-decoration: none;
+    font-weight: 600;
+  }
+  
+  .post-card a:hover {
+    text-decoration: underline;
+  }
+  
+  .analysis-container {
+    width: min(1200px, 90vw);
+    margin-top: 40px;
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+  
+  .tabs {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+    border-bottom: 2px solid rgba(255, 69, 0, 0.1);
+  }
+  
+  .tab-button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 69, 0, 0.1);
+    color: #FF4500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+  }
+  
+  .tab-button:hover {
+    background: rgba(255, 69, 0, 0.2);
+  }
+  
+  .tab-button.active {
+    background: #FF4500;
+    color: white;
+  }
+  
+  .tab-content {
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  
+  .insight-item {
+    padding: 15px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    color: #333;
+    line-height: 1.5;
+  }
+  
+  .insight-item:last-child {
+    border-bottom: none;
+  }
+  
+  .idea-input-container {
+    width: min(800px, 90vw);
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  
+  .idea-input {
+    width: 100%;
+    padding: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 16px;
+    font-size: 1.1rem;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    resize: vertical;
+    min-height: 120px;
+    outline: none;
+    backdrop-filter: blur(5px);
+    transition: all 0.3s ease-in-out;
+  }
+  
+  .idea-input::placeholder {
+    color: rgba(255, 255, 255, 0.7);
+  }
+  
+  .idea-input:focus {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.1);
+  }
+  
+  .keywords-container,
+  .subreddits-container {
+    width: min(800px, 90vw);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 16px;
+    padding: 20px;
+    margin-top: 20px;
+    text-align: center;
+  }
+  
+  .keywords-container h2,
+  .subreddits-container h2 {
+    color: #FF4500;
+    font-size: 1.5rem;
+    margin-bottom: 15px;
+    text-align: center;
+  }
+  
+  .keywords-pills,
+  .subreddit-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+  
+  .keyword-pill {
+    background: rgba(255, 69, 0, 0.1);
+    color: #FF4500;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+  
+  .subreddit-pill {
+    background: #FF4500;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+  }
+  
+  .subreddit-pill:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 69, 0, 0.2);
+  }
+  
+  .subscriber-count {
+    font-size: 0.8rem;
+    opacity: 0.8;
+  }
+  
+  .components-list {
+    width: min(800px, 90vw);
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    align-items: center;
+  }
+  
+  .components-list > li {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  /* Remove these width definitions as they're now controlled by the li elements */
+  .idea-input,
+  .keywords-container,
+  .subreddits-container {
+    width: 100%;
+  }
+  
