@@ -137,7 +137,7 @@ const LandingPage = (): JSX.Element => {
     <div className="landing-page">
       <ul className="components-list">
         <li>
-          <h1>Reddit Community Finder</h1>
+          <h1>Reddit Idea Validator</h1>
         </li>
         
         <li>
