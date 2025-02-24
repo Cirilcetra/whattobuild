@@ -2,25 +2,30 @@ import os
 import json
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from openai import OpenAI
 import praw
 from dotenv import load_dotenv
 from pydantic import BaseModel
-from typing import List
-from subreddit import search_subreddits
+from typing import List, Optional, Dict
+
+# Use relative imports since we're in a package
+from .subreddit import search_subreddits, get_subreddit_posts
+from .chromadb import RedditPostStore
 
 # Load environment variables
 load_dotenv()
 
 app = FastAPI()
 
-# Add CORS middleware
+# Update CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000"],  # Your React app's URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"]
 )
 
 # Initialize OpenAI and Reddit clients
@@ -31,12 +36,29 @@ reddit = praw.Reddit(
     user_agent="python:reddit_analyzer:v1.0 (by /u/your_username)"
 )
 
+# Initialize RedditPostStore
+post_store = RedditPostStore()
+
 class IdeaDescription(BaseModel):
     description: str
 
 class Keyword(BaseModel):
     text: str
     relevance: float
+
+class ErrorResponse(BaseModel):
+    success: bool = False
+    error: str
+
+class SubredditResponse(BaseModel):
+    success: bool = True
+    subreddits: List[Dict]
+
+class AnalysisResponse(BaseModel):
+    success: bool = True
+    category: str
+    subreddit: Optional[str]
+    analysis: str
 
 async def analyze_reddit_posts(posts):
     """Analyzes Reddit posts and categorizes them into structured insights."""
@@ -76,8 +98,8 @@ Provide a structured JSON response only. Do not include explanations."""
     return response.choices[0].message.content
 
 @app.get("/fetch_reddit/{subreddit}")
-async def fetch_reddit(subreddit: str, limit: int = 10):
-    """Fetches posts from a subreddit and categorizes insights using AI."""
+async def fetch_reddit(subreddit: str, limit: int = 100):
+    """Fetches posts from a subreddit, stores them in ChromaDB, and returns insights."""
     
     try:
         posts = []
@@ -86,17 +108,22 @@ async def fetch_reddit(subreddit: str, limit: int = 10):
             posts.append({
                 "id": post.id,
                 "title": post.title,
-                "text": post.selftext[:500],  # Truncate long posts for efficiency
+                "text": post.selftext[:500],  # Truncate long posts
                 "score": post.score,
                 "url": post.url,
                 "comments": post.num_comments,
                 "author": str(post.author) if post.author else "[deleted]",
-                "created_utc": post.created_utc
+                "created_utc": post.created_utc,
+                "subreddit": subreddit
             })
 
         if not posts:
             return {"success": False, "error": "No posts found"}
 
+        # Store posts in ChromaDB
+        post_store.store_posts(posts)
+
+        # Get analysis using the stored posts
         analysis = await analyze_reddit_posts(posts)
         
         return {
@@ -110,26 +137,26 @@ async def fetch_reddit(subreddit: str, limit: int = 10):
         return {"success": False, "error": str(e)}
 
 @app.post("/generate_keywords")
-async def generate_keywords(idea: IdeaDescription) -> dict:
-    """Generates relevant keywords from an idea description using OpenAI."""
-    
+async def generate_keywords(description: dict):
     try:
-        prompt = f"""Given the following product or business idea, generate relevant keywords.
-        Format the response as a JSON array of objects, each with 'text' and 'relevance' (0-1) properties.
+        prompt = f"""Given the following product or business idea, generate relevant keywords to find relavant reddit communities that align with the idea.Make sure the keywords communicate the idea in a way that is easy to find on reddit.
+        Format the response as a JSON object with a 'keywords' array containing objects with 'text' and 'relevance' properties.
         Include only the most relevant 5-8 keywords.
 
-        Idea: {idea.description}
+        Idea: {description['description']}
 
         Example format:
-        [
-            {{"text": "productivity", "relevance": 0.9}},
-            {{"text": "automation", "relevance": 0.8}}
-        ]
+        {{
+            "keywords": [
+                {{"text": "productivity", "relevance": 0.9}},
+                {{"text": "automation", "relevance": 0.8}}
+            ]
+        }}
         
-        Provide only the JSON array, no additional text."""
+        Provide only the JSON object, no additional text."""
 
         response = openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": "You are a keyword extraction specialist."},
                 {"role": "user", "content": prompt}
@@ -137,56 +164,120 @@ async def generate_keywords(idea: IdeaDescription) -> dict:
             response_format={ "type": "json_object" }
         )
 
-        # Parse the response and ensure it's in the correct format
+        # Parse the response
         keywords_data = json.loads(response.choices[0].message.content)
         
-        # If the response is wrapped in an object, extract the keywords array
-        keywords = keywords_data.get('keywords', keywords_data) if isinstance(keywords_data, dict) else keywords_data
-        
-        return {
-            "success": True,
-            "keywords": keywords
-        }
+        # Ensure the response has the expected structure
+        if not isinstance(keywords_data, dict) or 'keywords' not in keywords_data:
+            keywords_data = {'keywords': keywords_data}
+
+        return JSONResponse(content={"success": True, "keywords": keywords_data['keywords']})
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
 
 @app.post("/suggest_subreddits")
-async def suggest_subreddits(keywords: dict) -> dict:
-    """Find relevant subreddits based on keywords using Google Search API."""
+async def suggest_subreddits(request: dict) -> JSONResponse:
+    """Find relevant subreddits based on keywords."""
     try:
-        # Extract keyword texts from the array of keyword objects
+        # Extract keyword texts
+        keywords = request.get("keywords", [])
         keyword_texts = []
-        for keyword in keywords.get("keywords", []):
+        
+        for keyword in keywords:
             if isinstance(keyword, dict) and "text" in keyword:
                 keyword_texts.append(keyword["text"])
             elif isinstance(keyword, str):
                 keyword_texts.append(keyword)
         
         if not keyword_texts:
-            raise HTTPException(status_code=400, detail="No valid keywords provided")
+            return JSONResponse(
+                status_code=400,
+                content={"success": False, "error": "No valid keywords provided"}
+            )
             
-        # Get subreddit suggestions
-        subreddit_names = search_subreddits(keyword_texts)
+        print("Searching with keywords:", keyword_texts)  # Debug log
+        subreddits = await search_subreddits(keyword_texts)
         
-        # For each subreddit, get basic info
-        subreddits = []
-        for name in subreddit_names:
-            try:
-                subreddit = reddit.subreddit(name)
-                subreddits.append({
-                    "name": name,
-                    "description": subreddit.public_description[:200] if subreddit.public_description else "",
-                    "subscribers": subreddit.subscribers
-                })
-            except Exception as e:
-                print(f"Error fetching info for r/{name}: {str(e)}")
-                continue
+        if not subreddits:
+            return JSONResponse(
+                content={
+                    "success": True,
+                    "subreddits": [],
+                    "message": "No subreddits found"
+                }
+            )
+            
+        return JSONResponse(
+            content={
+                "success": True,
+                "subreddits": subreddits
+            }
+        )
+    except Exception as e:
+        print(f"Error in suggest_subreddits: {str(e)}")  # Debug log
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "error": str(e)}
+        )
+
+@app.get("/posts/{category}")
+async def get_posts_by_category(
+    category: str,
+    subreddit: Optional[str] = None,
+    limit: int = 10
+):
+    """Fetches posts from ChromaDB based on category and optionally filtered by subreddit"""
+    try:
+        posts = post_store.get_posts_by_category(
+            category=category,
+            subreddit=subreddit,
+            limit=limit
+        )
         
         return {
             "success": True,
-            "subreddits": subreddits
+            "category": category,
+            "subreddit": subreddit,
+            "posts": posts
         }
     except Exception as e:
-        print(f"Error in suggest_subreddits: {str(e)}")  # Add debug logging
+        return {"success": False, "error": str(e)}
+
+@app.get("/analyze/{category}", response_model=AnalysisResponse)
+async def analyze_category(
+    category: str,
+    subreddit: Optional[str] = None
+):
+    """Analyzes posts in a category using LangChain and GPT"""
+    try:
+        analysis = await post_store.analyze_category(
+            category=category,
+            subreddit=subreddit
+        )
+        
+        return {
+            "success": True,
+            "category": category,
+            "subreddit": subreddit,
+            "analysis": analysis
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/search")
+async def search(query: str) -> List[Dict]:
+    try:
+        return search_subreddits(query)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/posts/{subreddit}")
+async def get_posts(subreddit: str) -> List[Dict]:
+    try:
+        return get_subreddit_posts(subreddit)
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
