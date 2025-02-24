@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import "./landingpage.css"; // Import the CSS file with correct name
 import { analyzeRedditPosts, AnalysisResult } from "../openai/openai";
+import ReactMarkdown from 'react-markdown';
 
 interface Keyword {
   text: string;
@@ -13,11 +14,44 @@ interface SubredditSuggestion {
   subscribers: number;
 }
 
+interface Classification {
+  solution_requests: string[];
+  pain_points: string[];
+  app_ideas: string[];
+  ai_solvable: string[];
+  [key: string]: string[];  // Add index signature
+}
+
 interface RedditAnalysis {
   category: string;
-  analysis: string;
+  analysis: {
+    classification: Classification;
+    summary: string;
+    metadata: {
+      total_posts: number;
+      analyzed_posts: number;
+      average_relevance: number;
+      subreddit: string;
+      category: string;
+    };
+  };
   subreddit?: string;
 }
+
+const CATEGORY_MAPPINGS: { [key: string]: string } = {
+  solution_requests: "Most Requested Ideas",
+  pain_points: "Common Problems",
+  app_ideas: "Popular Suggestions",
+  ai_solvable: "AI-Solvable Ideas"
+};
+
+const truncateToWords = (text: string, wordLimit: number) => {
+  const words = text.split(' ');
+  if (words.length > wordLimit) {
+    return words.slice(0, wordLimit).join(' ') + '...';
+  }
+  return text;
+};
 
 const LandingPage = (): JSX.Element => {
   const [ideaDescription, setIdeaDescription] = useState("");
@@ -27,7 +61,8 @@ const LandingPage = (): JSX.Element => {
   const [error, setError] = useState("");
   const [selectedSubreddit, setSelectedSubreddit] = useState<string>("");
   const [analysis, setAnalysis] = useState<RedditAnalysis | null>(null);
-  const [activeCategory, setActiveCategory] = useState<string>("ideas");
+  const [activeCategory, setActiveCategory] = useState<string>("solution_requests");
+  const [fetchData, setFetchData] = useState<{ total_posts_analyzed: number } | null>(null);
 
   const generateKeywords = async () => {
     if (!ideaDescription.trim()) return;
@@ -98,38 +133,47 @@ const LandingPage = (): JSX.Element => {
     }
   };
 
-  const analyzeSubreddit = async (subredditName: string, category: string) => {
+  const analyzeSubreddit = async (subredditName: string) => {
     setLoading(true);
     setError("");
+    setFetchData(null);
     
     try {
-      const response = await fetch(
-        `http://localhost:8000/analyze/${category}?subreddit=${subredditName}`
-      );
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      if (data.success) {
-        setAnalysis(data);
-        setSelectedSubreddit(subredditName);
-      } else {
-        throw new Error(data.error);
-      }
+        const fetchResponse = await fetch(`http://localhost:8000/fetch_reddit/${subredditName}`);
+        const fetchDataResponse = await fetchResponse.json();
+        setFetchData(fetchDataResponse);
+        
+        if (!fetchDataResponse.success) {
+            throw new Error(fetchDataResponse.error || 'Failed to fetch subreddit posts');
+        }
+
+        const analysisResponse = await fetch(
+            `http://localhost:8000/analyze/${activeCategory}?subreddit=${subredditName}`
+        );
+        const analysisData = await analysisResponse.json();
+        
+        if (analysisData.success) {
+            setAnalysis({
+                category: analysisData.category,
+                analysis: analysisData.analysis,
+                subreddit: analysisData.subreddit
+            });
+            setSelectedSubreddit(subredditName);
+        } else {
+            throw new Error(analysisData.error || 'Failed to analyze subreddit');
+        }
     } catch (err) {
-      console.error("Error:", err);
-      setError(`Failed to analyze subreddit: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        console.error("Error:", err);
+        setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 
   const categories = [
-    { id: "ideas", label: "Most Requested Ideas" },
-    { id: "problems", label: "Common Problems" },
-    { id: "suggestions", label: "Popular Suggestions" },
+    { id: "solution_requests", label: "Most Requested Ideas" },
+    { id: "pain_points", label: "Common Problems" },
+    { id: "app_ideas", label: "Popular Suggestions" },
     { id: "ai_solvable", label: "AI-Solvable Ideas" }
   ];
 
@@ -178,13 +222,13 @@ const LandingPage = (): JSX.Element => {
         {subreddits.length > 0 && (
           <li>
             <div className="subreddits-container">
-              <h2>Suggested Communities</h2>
+              <h2>Select a Subreddit</h2>
               <div className="subreddit-pills-wrapper">
                 <div className="subreddit-pills">
                   {subreddits.map((subreddit, index) => (
                     <button
                       key={index}
-                      onClick={() => analyzeSubreddit(subreddit.name, activeCategory)}
+                      onClick={() => analyzeSubreddit(subreddit.name)}
                       className={`subreddit-pill ${selectedSubreddit === subreddit.name ? 'active' : ''}`}
                     >
                       r/{subreddit.name}
@@ -196,38 +240,57 @@ const LandingPage = (): JSX.Element => {
                 </div>
               </div>
 
-              {selectedSubreddit && (
-                <>
-                  <div className="category-tabs">
-                    {categories.map(category => (
-                      <button
-                        key={category.id}
-                        className={`category-tab ${activeCategory === category.id ? 'active' : ''}`}
-                        onClick={() => {
-                          setActiveCategory(category.id);
-                          analyzeSubreddit(selectedSubreddit, category.id);
-                        }}
-                      >
-                        {category.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="content-area">
-                    {loading ? (
-                      <div className="loading">Analyzing subreddit...</div>
-                    ) : analysis ? (
-                      <div className="insight-item">
-                        {analysis.analysis}
+              {/* Analysis Container nested inside subreddits-container */}
+              {(loading || analysis) && (
+                <div className="analysis-container">
+                  {loading ? (
+                    <div className="loading">
+                      <div className="loading-spinner"></div>
+                      <p>Analyzing subreddit...</p>
+                      {fetchData?.total_posts_analyzed && (
+                        <p>Fetched {fetchData.total_posts_analyzed} posts</p>
+                      )}
+                    </div>
+                  ) : analysis && (
+                    <div className="analysis-content">
+                      <div className="community-summary">
+                        <h2>Community Insights</h2>
+                        <ReactMarkdown
+                          components={{
+                            p: ({children}) => <p className="summary-text">{children}</p>
+                          }}
+                        >
+                          {truncateToWords(analysis.analysis.summary, 100)}
+                        </ReactMarkdown>
                       </div>
-                    ) : null}
-                  </div>
-                </>
+                      
+                      <div className="tabs">
+                        {Object.entries(CATEGORY_MAPPINGS).map(([key, label]) => (
+                          <button
+                            key={key}
+                            className={`tab-button ${activeCategory === key ? 'active' : ''}`}
+                            onClick={() => setActiveCategory(key)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="tab-content">
+                        {analysis.analysis.classification[activeCategory]?.length > 0 ? (
+                          analysis.analysis.classification[activeCategory].map((item, index) => (
+                            <div key={index} className="insight-item">
+                              {item}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="no-data">No insights available for this category</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
-              
-              <button className="test-button">
-                Test my idea
-              </button>
             </div>
           </li>
         )}
@@ -237,3 +300,4 @@ const LandingPage = (): JSX.Element => {
 };
 
 export default LandingPage;
+

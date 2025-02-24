@@ -58,7 +58,7 @@ class AnalysisResponse(BaseModel):
     success: bool = True
     category: str
     subreddit: Optional[str]
-    analysis: str
+    analysis: Dict
 
 async def analyze_reddit_posts(posts):
     """Analyzes Reddit posts and categorizes them into structured insights."""
@@ -98,39 +98,34 @@ Provide a structured JSON response only. Do not include explanations."""
     return response.choices[0].message.content
 
 @app.get("/fetch_reddit/{subreddit}")
-async def fetch_reddit(subreddit: str, limit: int = 100):
+async def fetch_reddit(subreddit: str, limit: int = 50):
     """Fetches posts from a subreddit, stores them in ChromaDB, and returns insights."""
-    
     try:
         posts = []
+        total_fetched = 0
         
         for post in reddit.subreddit(subreddit).hot(limit=limit):
             posts.append({
                 "id": post.id,
                 "title": post.title,
-                "text": post.selftext[:500],  # Truncate long posts
+                "selftext": post.selftext[:300],
                 "score": post.score,
-                "url": post.url,
-                "comments": post.num_comments,
-                "author": str(post.author) if post.author else "[deleted]",
+                "num_comments": post.num_comments,
                 "created_utc": post.created_utc,
-                "subreddit": subreddit
+                "subreddit": subreddit,
+                "url": post.url
             })
+            total_fetched += 1
 
         if not posts:
             return {"success": False, "error": "No posts found"}
 
-        # Store posts in ChromaDB
-        post_store.store_posts(posts)
-
-        # Get analysis using the stored posts
-        analysis = await analyze_reddit_posts(posts)
+        await post_store.store_posts(posts)
         
         return {
             "success": True,
             "subreddit": subreddit,
-            "total_posts_analyzed": len(posts),
-            "analysis": analysis
+            "total_posts_analyzed": total_fetched
         }
     
     except Exception as e:
@@ -254,7 +249,7 @@ async def analyze_category(
 ):
     """Analyzes posts in a category using LangChain and GPT"""
     try:
-        analysis = await post_store.analyze_category(
+        result = await post_store.analyze_category(
             category=category,
             subreddit=subreddit
         )
@@ -263,7 +258,7 @@ async def analyze_category(
             "success": True,
             "category": category,
             "subreddit": subreddit,
-            "analysis": analysis
+            "analysis": json.loads(result["analysis"])
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
